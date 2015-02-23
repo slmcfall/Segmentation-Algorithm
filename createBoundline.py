@@ -18,19 +18,16 @@ arcpy.env.overwriteOutput = 1 # Important for debugging; won't freak out about f
 # Local variables:
 fileInput = arcpy.GetParameterAsText(0)
 boundline = arcpy.GetParameterAsText(1)
-dissolve = "dissolve"
+simpleFile = arcpy.GetParameterAsText(2)
+spatial_ref = arcpy.Describe(fileInput).spatialReference
+vertices = arcpy.GetParameterAsText(3)
+#vertices = "vertices"
 
-# Process: Dissolve
-arcpy.Dissolve_management(fileInput, dissolve, "", "", "MULTI_PART", "DISSOLVE_LINES")
+# Simplify dataset
+arcpy.SimplifyPolygon_cartography(fileInput,simpleFile,"POINT_REMOVE",50,"","RESOLVE_ERRORS")
 
-# Process: Polygon To Line
-arcpy.PolygonToLine_management(dissolve, boundline, "IDENTIFY_NEIGHBORS")
+# Get vertices for dataset
+arcpy.FeatureVerticesToPoints_management(fileInput, vertices, "ALL")
 
-# Output test
-mxd = arcpy.mapping.MapDocument("CURRENT")
-data_frame = arcpy.mapping.ListDataFrames(mxd, "*")[0]
-add_layer = arcpy.mapping.Layer(boundline)
-arcpy.mapping.AddLayer(data_frame,add_layer)
-
-# Remove intermediate files from memory
-arcpy.Delete_management(dissolve)
+# Create bound using TIN
+#arcpy.CreateTin_3d(bound_tin, spatial_ref, "vertices, <None>, hardclip")
