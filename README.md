@@ -1,4 +1,4 @@
-# Segmentation-Algorithm
+# segmentation-algorithm
 
 Algorithm for psuedo-random segmentation of census block tracts into groups of equal population size. 
 
