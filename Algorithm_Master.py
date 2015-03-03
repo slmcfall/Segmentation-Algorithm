@@ -11,40 +11,44 @@
 import arcpy
 arcpy.env.overwriteOutput = 1
 
+""" Parameters """
 fileInput = arcpy.GetParameterAsText(0)
 #totalSubsects = arcpy.GetParameterAsText(1)
 totalSubsects = 1
 totalTracts = 0
 totalPop = 0
 
-""" Calculate total population """
+
+""" BEGIN SCRIPT """
+
+
+""" 1. Calculate centroids """
+# appends the column to the table
+arcpy.AddField_management(fileInput,"Centroid_X","DOUBLE")
+arcpy.AddField_management(fileInput,"Centroid_Y","DOUBLE")
+
+# calculates the centroid values
+arcpy.CalculateField_management(fileInput,"Centroid_X",
+                                "!SHAPE.CENTROID.X!","Python_9.3")
+arcpy.CalculateField_management(fileInput,"Centroid_Y",
+                                "!SHAPE.CENTROID.Y!","Python_9.3")
+
+""" 2. Calculate inputs """
 # cursor is a one time thing..
 rows = arcpy.SearchCursor(fileInput, "", "", "", "")
 for row in rows:
     totalPop += row.getValue('TOTAL')
     totalTracts += 1
 
-# output total population and number of tracts
+# print total population, number of tracts, subsections
 arcpy.AddMessage("Number of Kids: " + str(totalPop))
 arcpy.AddMessage("Number of Tracts" + str(totalTracts))
+arcpy.AddMessage("Number of Subsections" + str(totalSubsects))
 
-""" Calculate centroids """
-arcpy.AddField_management(fileInput,"Centroid_X","DOUBLE")
-arcpy.AddField_management(fileInput,"Centroid_Y","DOUBLE")
+""" 3. Calculate T, kids/subsection """
+kidsPerSS = totalPop/totalTracts
 
-arcpy.CalculateField_management(fileInput,"Centroid_X",
-                                "!SHAPE.CENTROID.X!","Python_9.3")
-arcpy.CalculateField_management(fileInput,"Centroid_Y",
-                                "!SHAPE.CENTROID.Y!","Python_9.3")
-
-"""
-2. Get input for:
-    a. Subsections
-    b. Number of Parcels
-    c. Total student population
-3. Calculate kids/subsection = T
-"""
-
+""" 4. Algorithm """
 currentSubsect = 0
 while (currentSubsect < totalSubsects):
 
