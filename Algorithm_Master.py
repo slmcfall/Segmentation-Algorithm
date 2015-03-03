@@ -10,6 +10,9 @@
 
 import arcpy
 arcpy.env.overwriteOutput = 1
+""" Nota bene !!! """
+""" workspace == essentially where stuff gets automatically saved...? """
+arcpy.env.workspace = "E:\Research\segmentation\Tests"
 
 """ Parameters """
 fileInput = arcpy.GetParameterAsText(0)
@@ -105,6 +108,16 @@ for row in cursor:
     arcpy.AddMessage("curHigh = " + str(high))
 
 arcpy.AddMessage("Starting position is shape number " + str(highNdx) + " with value " + str(high))
+
+""" Distance to Other Polygons """
+
+# original tract file to points
+fToShape = arcpy.FeatureToPoint_management(fileinput, "fToShape.shp", "CENTROID")
+# essentially a Select By Attribute step, creates new shapefile
+### func(input file, output folder, output name, sql statement
+start = arcpy.FeatureClassToFeatureClass_conversion(str(fToShape), arcpy.env.workspace, "start.shp", "FID = 82")
+# creates table with distances from origin/outermost point to all other centroids of original tract file
+distances = arcpy.PointDistance_analysis(str(start), str(fToShape), "distances.dbf")
 
 """
     Divide sections starting with startPoly
