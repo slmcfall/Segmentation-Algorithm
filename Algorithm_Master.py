@@ -5,7 +5,7 @@
 # Author:      erabrahams and slmcfall
 #
 # Created:     30/01/2015
-# Copyright:   (c) erabrahams 2015
+# Copyright:   (c) erabrahams 2015, prestige worldwide
 #-------------------------------------------------------------------------------
 
 import arcpy
