@@ -18,9 +18,15 @@ totalTracts = 0
 totalPop = 0
 
 """ Calculate total population """
+# cursor is a one time thing..
 rows = arcpy.SearchCursor(fileInput, "", "", "", "")
 for row in rows:
     totalPop += row.getValue('TOTAL')
+    totalTracts += 1
+
+# output total population and number of tracts
+arcpy.AddMessage("Number of Kids: " + str(totalPop))
+arcpy.AddMessage("Number of Tracts" + str(totalTracts))
 
 """ Calculate centroids """
 arcpy.AddField_management(fileInput,"Centroid_X","DOUBLE")
