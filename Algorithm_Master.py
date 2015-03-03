@@ -112,7 +112,6 @@ arcpy.AddMessage("Starting position is shape number " + str(highNdx) + " with va
 # original tract file to points
 polyToPoint = arcpy.FeatureToPoint_management(fileinput, "fToShape.shp", "CENTROID")
 # essentially a Select By Attribute step, creates new shapefile
-### func(input file, output folder, output name, sql statement)
 startPoint = arcpy.FeatureClassToFeatureClass_conversion(polyToPoint, arcpy.env.workspace, "start.shp", "FID = 82")
 # creates table with distances from origin/outermost point to all other centroids of original tract file
 dist2Points = arcpy.PointDistance_analysis(startPoint, polyToPoint, "distances.dbf")
