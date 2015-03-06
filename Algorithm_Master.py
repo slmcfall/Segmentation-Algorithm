@@ -10,7 +10,7 @@
 
 import arcpy
 arcpy.env.overwriteOutput = 1
-arcpy.env.workspace = "E:\Research\segmentation\Tests"
+arcpy.env.workspace = "in_memory"
 
 """ Parameters """
 fileInput = arcpy.GetParameterAsText(0)
@@ -19,45 +19,67 @@ totalSubsects = 1
 totalTracts = 0
 totalPop = 0
 
+parcelDict = {} # Master dictionary to hold parcel attributes
+boundList = [] # To hold indices of bounding parcels.
+toDistance = [] # List for distances from curPoint to other points
+
+centroids = "centroids"
+boundline = arcpy.GetParameterAsText(1)
+#boundline = "boundline"
+dissolve = "dissolve"
+
+parcels = "parcels_lyr"        # Layer for all parcels
+bndlineLayer = "bound_lyr"   # Layer for boundline
+parcelPoints = "parcel_pnts" # Point features to perform distance calcs
+curShape = "select_shape"
+curParcel = "select_layer"
+curPoint = "select_pnts"
+
+distance = "dists" # A table that will hold point distances
+
+# Calculate the "farthest distance" to the NE or SW.
+def centroidPosition(row):
+    x = row[2]
+    y = row[3]
+    return abs(x) + abs(y)
 
 """ BEGIN SCRIPT """
 
 
 """ 1. Calculate centroids """
-# appends the column to the table
+# Append the column to the table
 arcpy.AddField_management(fileInput,"Centroid_X","DOUBLE")
 arcpy.AddField_management(fileInput,"Centroid_Y","DOUBLE")
 
-# calculates the centroid values
+# Calculate the centroid values
 arcpy.CalculateField_management(fileInput,"Centroid_X",
                                 "!SHAPE.CENTROID.X!","Python_9.3")
 arcpy.CalculateField_management(fileInput,"Centroid_Y",
                                 "!SHAPE.CENTROID.Y!","Python_9.3")
 
+# Create point shapefile for centroids
+arcpy.FeatureToPoint_management(fileInput, centroids, "CENTROID")
+
 """ 2. Calculate inputs """
 # cursor is a one time thing..
-rows = arcpy.SearchCursor(fileInput, "", "", "", "")
+rows = arcpy.da.SearchCursor(fileInput, "TOTAL")
 for row in rows:
-    totalPop += row.getValue('TOTAL')
+    totalPop += row[0]
     totalTracts += 1
 
 # print total population, number of tracts, subsections
 arcpy.AddMessage("Number of Kids: " + str(totalPop))
-arcpy.AddMessage("Number of Tracts" + str(totalTracts))
-arcpy.AddMessage("Number of Subsections" + str(totalSubsects))
+arcpy.AddMessage("Number of Tracts: " + str(totalTracts))
+arcpy.AddMessage("Number of Subsections: " + str(totalSubsects))
 
 """ 3. Calculate T, kids/subsection """
-kidsPerSS = totalPop/totalTracts
+kidsPerSS = totalPop/totalSubsects
 
 """ 4. Algorithm """
 currentSubsect = 0
 while (currentSubsect < totalSubsects):
 
     """ Create bounding line G """
-    boundline = arcpy.GetParameterAsText(1)
-    #boundline = "boundline"
-    dissolve = "dissolve"
-
     # Process: Dissolve
     arcpy.Dissolve_management(fileInput, dissolve, "", "", "MULTI_PART", "DISSOLVE_LINES")
 
@@ -73,48 +95,61 @@ while (currentSubsect < totalSubsects):
     # Remove intermediate files from memory
     arcpy.Delete_management(dissolve)
 
-"""
-    2. Find all bounding polygons, create list bndPoly
-    3. Determine starting point based on our value for 'Southwestmost-ness'"""
 
-parcels = "parcels_lyr"
-bndLayer = "bound_lyr"
+    """Find all bounding polygons, create list bndPoly.
+       Determine starting point based on our value for 'Southwestmost-ness'"""
 
-def centroidPosition(row):
-    x = row.getValue("Centroid_X")
-    y = row.getValue("Centroid_Y")
-    return abs(x) + abs(y)
+    # Create layers for parcels and boundline; find intersection
+    arcpy.MakeFeatureLayer_management(fileInput, parcels)
+    arcpy.MakeFeatureLayer_management(boundline, bndlineLayer)
+    arcpy.SelectLayerByLocation_management(parcels, "INTERSECT", bndlineLayer, "", "NEW_SELECTION")
 
-arcpy.MakeFeatureLayer_management(fileInput, parcels)
-arcpy.MakeFeatureLayer_management(bndLine, bndLayer)
-arcpy.SelectLayerByLocation_management(parcels, "INTERSECT", bndLayer, "", "NEW_SELECTION")
+    # Create searchCursor to access attributes. ID = 0, Name = 1, X = 2, Y = 3.
+    cursor = arcpy.da.SearchCursor(parcels, ["FID","NAME10","CENTROID_X","CENTROID_Y"])
+    #for line in cursor:
+    #    arcpy.AddMessage(line[1])
+    #cursor.reset()
 
-cursor = arcpy.SearchCursor(parcels)
-"""for line in cursor:
-    arcpy.AddMessage(line.getValue("NAME"))"""
+    # Iterate through boundary polygons to find the starting (farthest) parcel, and
+    # create a queue of bound-poly indices. Furthermore, initialize master dict.
+    high = 0
+    highNdx = 0
+    coord = 0
+    for row in cursor:
+        parcelDict[row[0]] = [None, None]
+        coord = centroidPosition(row)
+        boundList.append(row[0])
+        arcpy.AddMessage("Index = " + str(row[0]) + ", coord = " + str(coord))
+        if (coord > high):
+            high = coord
+            highNdx = row[0]
+        arcpy.AddMessage("curHigh = " + str(high))
 
-high = 0
-highNdx = 0
-coord = 0
+    arcpy.AddMessage("Starting position is shape number " + str(highNdx) + " with value " + str(high))
 
-for row in cursor:
-    coord = centroidPosition(row)
-    arcpy.AddMessage("Index = " + str(row.getValue("FID")) + ", coord = " + str(coord))
-    if (coord > high):
-        high = coord
-        highNdx = row.getValue("FID")
-    arcpy.AddMessage("curHigh = " + str(high))
+    # Grab starting polygon, export as new shape/layer
+    curNdx = highNdx
+    arcpy.FeatureClassToFeatureClass_conversion(parcels, arcpy.env.workspace, curShape, "FID = " + str(curNdx))
+    arcpy.MakeFeatureLayer_management(curShape, curParcel)
 
-arcpy.AddMessage("Starting position is shape number " + str(highNdx) + " with value " + str(high))
+    """ Distance to Other Polygons """
 
-""" Distance to Other Polygons """
+    # Select starting centroid, and find distance to all other centroids.
+    arcpy.FeatureClassToFeatureClass_conversion(centroids, arcpy.env.workspace, curPoint, "FID = " + str(curNdx))
+    arcpy.PointDistance_analysis(curPoint, centroids, distance)
 
-# original tract file to points
-polyToPoint = arcpy.FeatureToPoint_management(fileinput, "fToShape.shp", "CENTROID")
-# essentially a Select By Attribute step, creates new shapefile
-startPoint = arcpy.FeatureClassToFeatureClass_conversion(polyToPoint, arcpy.env.workspace, "start.shp", "FID = 82")
-# creates table with distances from origin/outermost point to all other centroids of original tract file
-dist2Points = arcpy.PointDistance_analysis(startPoint, polyToPoint, "distances.dbf")
+    toDistance = []
+    dists = arcpy.da.SearchCursor(distance, ["NEAR_FID","DISTANCE"])
+    for row in dists:
+        arcpy.AddMessage("Dist_To: " + str(row[0]) + " = " + str(row[1]))
+        toDistance.append([row[1], row[0]])
+    toDistance.sort()
+
+    arcpy.AddMessage("\n")
+    for i in toDistance:
+        arcpy.AddMessage(i)
+
+    currentSubsect += 1
 
 """
     Divide sections starting with startPoly
